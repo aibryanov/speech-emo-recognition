@@ -1,5 +1,7 @@
 import hydra
 from omegaconf import DictConfig
+from src.dataset import audioMNIST
+from src.hf_dataset import hf_audioMNIST
 
 
 
@@ -7,7 +9,8 @@ from omegaconf import DictConfig
 def main(config: DictConfig):
     
     
-    return
+    print(type(hf_audioMNIST))
+    print(type(audioMNIST))
 
 if __name__ == '__main__':
     main()

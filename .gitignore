@@ -26,6 +26,9 @@ outputs/
 multirun/
 *.log
 
+# Local datasets
+data/
+
 # IDE files
 .idea/
 .vscode/

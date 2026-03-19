@@ -1,0 +1,5 @@
+name: "Dusha"
+
+paths:
+  hf_path: "KELONMYOSA/dusha_emotion_audio"
+  local_path: "data/Dusha"
