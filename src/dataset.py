@@ -1,24 +1,20 @@
-from pathlib import Path
-
-from torch.utils.data import Dataset
 import torch
-import librosa
+from datasets import load_from_disk
+from torch.utils.data import Dataset
 
-from src.hf_dataset import hf_audioMNIST
-
-
-audioMNIST = hf_audioMNIST.with_format("torch")
 
 class MNISTDataset(Dataset):
-    def __init__(self, path_to_data):
-        self.paths = list(map(str, Path(path_to_data).glob('**/*.wav')))
-        self.labels = list(map(lambda x: int(Path(x).name.split('_')[0]), self.paths))
+    def __init__(self, path_to_data: str = "data/AudioMNIST", split: str = "train"):
+        dataset_dict = load_from_disk(path_to_data)
+        self.audioMNIST = dataset_dict[split]
+        self.labels = self.audioMNIST["digit"]
 
     def __getitem__(self, index):
-        wav, sr = librosa.load(self.paths[index])
-        label = self.labels[index]
+        row = self.audioMNIST[index]
+        wav = torch.tensor(row["audio"]["array"], dtype=torch.float32)
+        label = torch.tensor(row["digit"], dtype=torch.long)
 
-        return torch.tensor(wav, dtype=torch.float), label
+        return wav, label
 
     def __len__(self):
-        return len(self.paths)
+        return len(self.audioMNIST)

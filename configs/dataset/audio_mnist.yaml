@@ -4,3 +4,4 @@ paths:
   hf_path: "gilkeyio/AudioMNIST"
   local_path: "data/AudioMNIST"
 
+sample_rate: 16000
