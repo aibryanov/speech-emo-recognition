@@ -31,9 +31,11 @@ def train_test_split(
     return train_subset, test_subset
 
 def create_dataloaders(cfg):
+    dataset_path = cfg.dataset.paths.local_path
+
     if cfg.dataset.name == 'AudioMNIST':
-        test_set = MNISTDataset(split='test')
-        train_set = MNISTDataset(split='train')
+        test_set = MNISTDataset(path_to_data=dataset_path, split='test')
+        train_set = MNISTDataset(path_to_data=dataset_path, split='train')
         train_set, dev_set = train_test_split(cfg, train_set, test_ratio=cfg.dataloader.dev_size)
 
     # elif cfg.dataset.name == 'Dusha':
@@ -65,4 +67,3 @@ def create_dataloaders(cfg):
                )
     
     return train_loader, dev_loader, test_loader
-

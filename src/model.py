@@ -62,8 +62,8 @@ class LSTMClassifier(nn.Module):
 
         raise ValueError(f"Unsupported pooling type: {self.pooling}")
 
-    def forward(self, batch):
-        features = self.features(batch)
+    def forward(self, wavs):
+        features = self.features(wavs)
         outputs, _ = self.lstm(features)
         pooled = self._pool_outputs(outputs)
         logits = self.fc(self.head_dropout(pooled))
