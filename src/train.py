@@ -1,5 +1,10 @@
+import json
+import shutil
+from pathlib import Path
+
 import torch
 import torch.nn as nn
+from omegaconf import OmegaConf
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 
@@ -13,11 +18,131 @@ def _compute_classification_metrics(labels, predictions, average="macro"):
     )
 
     return {
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
+        "accuracy": float(accuracy),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
     }
+
+
+def _get_checkpoint_dir(cfg):
+    checkpoint_dir = Path(cfg.train.checkpoint.get("dir", "checkpoints"))
+
+    if checkpoint_dir.is_absolute():
+        return checkpoint_dir
+
+    try:
+        from hydra.core.hydra_config import HydraConfig
+
+        return Path(HydraConfig.get().runtime.output_dir) / checkpoint_dir
+    except Exception:
+        return checkpoint_dir
+
+
+def _sort_checkpoints(checkpoints, mode):
+    reverse = mode == "max"
+
+    return sorted(checkpoints, key=lambda checkpoint: checkpoint["score"], reverse=reverse)
+
+
+def _write_leaderboard(checkpoint_dir, checkpoints):
+    leaderboard_path = checkpoint_dir / "leaderboard.json"
+    payload = []
+
+    for rank, checkpoint in enumerate(checkpoints, start=1):
+        payload.append(
+            {
+                "rank": rank,
+                "epoch": checkpoint["epoch"],
+                "score": checkpoint["score"],
+                "monitor": checkpoint["monitor"],
+                "path": str(checkpoint["path"]),
+                "metrics": checkpoint["metrics"],
+            }
+        )
+
+    with leaderboard_path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+def _save_checkpoint(cfg, checkpoint_dir, epoch, model, optimizer, metrics, monitor_name):
+    monitor_value = metrics[monitor_name]
+    checkpoint_name = f"epoch_{epoch:03d}_{monitor_name}_{monitor_value:.4f}"
+    checkpoint_path = checkpoint_dir / checkpoint_name
+    checkpoint_path.mkdir(parents=True, exist_ok=True)
+
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "metrics": metrics,
+            "monitor": monitor_name,
+        },
+        checkpoint_path / "checkpoint.pt",
+    )
+    OmegaConf.save(cfg, checkpoint_path / "config.yaml")
+
+    with (checkpoint_path / "metrics.json").open("w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "epoch": epoch,
+                "monitor": monitor_name,
+                "score": monitor_value,
+                "metrics": metrics,
+            },
+            f,
+            indent=2,
+        )
+
+    return checkpoint_path
+
+
+def _update_top_checkpoints(
+    cfg,
+    checkpoint_dir,
+    saved_checkpoints,
+    epoch,
+    model,
+    optimizer,
+    metrics,
+):
+    checkpoint_cfg = cfg.train.checkpoint
+    top_k = checkpoint_cfg.top_k
+    monitor_name = checkpoint_cfg.monitor
+    mode = checkpoint_cfg.mode
+
+    if monitor_name not in metrics:
+        raise ValueError(f"Checkpoint monitor '{monitor_name}' is not available in metrics: {list(metrics.keys())}")
+
+    checkpoint_path = _save_checkpoint(
+        cfg,
+        checkpoint_dir,
+        epoch,
+        model,
+        optimizer,
+        metrics,
+        monitor_name,
+    )
+
+    saved_checkpoints.append(
+        {
+            "path": checkpoint_path,
+            "epoch": epoch,
+            "score": metrics[monitor_name],
+            "monitor": monitor_name,
+            "metrics": metrics,
+        }
+    )
+    saved_checkpoints = _sort_checkpoints(saved_checkpoints, mode)
+
+    while len(saved_checkpoints) > top_k:
+        removed_checkpoint = saved_checkpoints.pop(-1)
+        shutil.rmtree(removed_checkpoint["path"], ignore_errors=True)
+
+    _write_leaderboard(checkpoint_dir, saved_checkpoints)
+
+    return saved_checkpoints
 
 
 @torch.no_grad()
@@ -57,13 +182,12 @@ def evaluate(model, data_loader, loss_fn, device, average="macro"):
         all_predictions,
         average=average,
     )
-    metrics["loss"] = total_loss / total_examples
+    metrics["loss"] = float(total_loss / total_examples)
 
     return metrics
 
 
 def train(cfg, model, train_loader, dev_loader=None):
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
@@ -77,6 +201,18 @@ def train(cfg, model, train_loader, dev_loader=None):
     num_epochs = cfg.train.epochs
     log_every = cfg.train.get("log_every", 0)
     metrics_average = cfg.train.get("metrics_average", "macro")
+    checkpoint_cfg = cfg.train.get("checkpoint", {})
+    checkpoint_enabled = checkpoint_cfg.get("enabled", False)
+    checkpoint_dir = None
+    saved_checkpoints = []
+
+    if checkpoint_enabled:
+        if dev_loader is None:
+            raise ValueError("DEV checkpointing is enabled, but dev_loader is None.")
+
+        checkpoint_dir = _get_checkpoint_dir(cfg)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
     history = {
         "train_loss": [],
         "train_accuracy": [],
@@ -171,6 +307,18 @@ def train(cfg, model, train_loader, dev_loader=None):
             history["dev_precision"].append(dev_metrics["precision"])
             history["dev_recall"].append(dev_metrics["recall"])
             history["dev_f1"].append(dev_metrics["f1"])
+
+            if checkpoint_enabled:
+                saved_checkpoints = _update_top_checkpoints(
+                    cfg,
+                    checkpoint_dir,
+                    saved_checkpoints,
+                    epoch,
+                    model,
+                    optimizer,
+                    dev_metrics,
+                )
+
             metrics_message += (
                 f" dev_loss={dev_metrics['loss']:.4f} "
                 f"dev_accuracy={dev_metrics['accuracy']:.4f} "

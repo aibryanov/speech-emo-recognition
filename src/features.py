@@ -24,18 +24,21 @@ def log_mel(
     n_mels: int = 80,
     window: str = "hann",
 ):
+    waveform = _to_waveform_tensor(batch)
     window_fn = _get_window_fn(window)
-
-    mel_spec = torchaudio.transforms.MelSpectrogram(
+    mel_transform = torchaudio.transforms.MelSpectrogram(
         sample_rate=sr,
         n_fft=n_fft,
         hop_length=hop_length,
         n_mels=n_mels,
         power=2.0,
         window_fn=window_fn,
-    )(_to_waveform_tensor(batch)) # (B, n_mels, T)
+    ).to(waveform.device)
 
-    log_mel_spec = torchaudio.transforms.AmplitudeToDB(stype="power")(mel_spec)
+    mel_spec = mel_transform(waveform) # (B, n_mels, T)
+
+    amplitude_to_db = torchaudio.transforms.AmplitudeToDB(stype="power").to(waveform.device)
+    log_mel_spec = amplitude_to_db(mel_spec)
 
     return log_mel_spec.transpose(-1, -2)
 
@@ -49,9 +52,9 @@ def mfcc(
     n_mels: int = 80,
     window: str = "hann",
 ):
+    waveform = _to_waveform_tensor(batch)
     window_fn = _get_window_fn(window)
-
-    mfcc_features = torchaudio.transforms.MFCC(
+    mfcc_transform = torchaudio.transforms.MFCC(
         sample_rate=sr,
         n_mfcc=n_mfcc,
         melkwargs={
@@ -60,7 +63,9 @@ def mfcc(
             "n_mels": n_mels,
             "window_fn": window_fn,
         },
-    )(_to_waveform_tensor(batch))
+    ).to(waveform.device)
+
+    mfcc_features = mfcc_transform(waveform)
 
     return mfcc_features.transpose(-1, -2)
 

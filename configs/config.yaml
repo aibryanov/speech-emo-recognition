@@ -21,6 +21,12 @@ train:
   weight_decay: 0.01
   log_every: 200
   metrics_average: "macro"
+  checkpoint:
+    enabled: true
+    dir: "checkpoints"
+    top_k: 3
+    monitor: "f1"
+    mode: "max"
 
 model:
   pooling: "mean"
