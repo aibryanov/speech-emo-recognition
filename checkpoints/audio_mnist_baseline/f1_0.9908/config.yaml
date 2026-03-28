@@ -1,0 +1,52 @@
+dataset:
+  name: AudioMNIST
+  paths:
+    hf_path: gilkeyio/AudioMNIST
+    local_path: data/AudioMNIST
+  sample_rate: 16000
+feature:
+  extractors:
+  - name: log_mel
+    params:
+      n_fft: 2048
+      hop_length: 512
+      n_mels: 80
+      window: hann
+  - name: mfcc
+    params:
+      n_fft: 2048
+      hop_length: 512
+      n_mels: 80
+      n_mfcc: 40
+      window: hann
+experiment_name: audio_mnist_baseline
+dataloader:
+  batch_size: 32
+  num_workers: 0
+  shuffle: true
+  dev_size: 0.1
+  test_size: 0.2
+train:
+  seed: 42
+  epochs: 3
+  learning_rate: 0.001
+  device: cpu
+  weight_decay: 0.01
+  log_every: 300
+  metrics_average: macro
+  checkpoint:
+    enabled: true
+    dir: checkpoints
+    top_k: 2
+    monitor: f1
+    mode: max
+model:
+  pooling: mean
+  head_dropout: 0.2
+  num_classes: 10
+  lstm:
+    hidden_size: 128
+    num_layers: 1
+    dropout: 0.2
+    bidirectional: false
+seed: 42

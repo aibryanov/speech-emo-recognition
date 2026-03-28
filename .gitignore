@@ -29,6 +29,9 @@ multirun/
 # Local datasets
 data/
 
+# Model checkpoints
+*.pt
+
 # IDE files
 .idea/
 .vscode/

@@ -6,18 +6,13 @@ from src.loader import create_dataloaders
 from src.model import LSTMClassifier
 from src.train import evaluate, train
 
-
-def _format_metrics(prefix, metrics):
-    return (
-        f"{prefix} "
-        f"loss={metrics['loss']:.4f} "
-        f"accuracy={metrics['accuracy']:.4f} "
-        f"precision={metrics['precision']:.4f} "
-        f"recall={metrics['recall']:.4f} "
-        f"f1={metrics['f1']:.4f}"
-    )
-
-
+def print_metrics(test_metrics):
+    print("–––––TEST METRICS–––––")
+    print(f"F1: {test_metrics['f1']}")
+    print(f"Precision: {test_metrics['precision']}")
+    print(f"Recall: {test_metrics['recall']}")
+    
+    
 @hydra.main(version_base="1.3", config_path="configs", config_name="config")
 def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
@@ -27,7 +22,7 @@ def main(cfg: DictConfig):
 
     history = train(cfg, model, train_loader, dev_loader)
 
-    device = next(model.parameters()).device
+    device = cfg.train.device
     loss_fn = nn.CrossEntropyLoss()
     test_metrics = evaluate(
         model,
@@ -37,9 +32,10 @@ def main(cfg: DictConfig):
         average=cfg.train.get("metrics_average", "macro"),
     )
 
-    print(_format_metrics("test", test_metrics))
+    print_metrics(test_metrics)
 
     return history
+
 
 
 if __name__ == "__main__":

@@ -15,16 +15,16 @@ dataloader:
 
 train:
   seed: 42
-  epochs: 10
+  epochs: 3
   learning_rate: 0.001
-  device: gpu
+  device: cpu
   weight_decay: 0.01
-  log_every: 200
+  log_every: 300
   metrics_average: "macro"
   checkpoint:
     enabled: true
     dir: "checkpoints"
-    top_k: 3
+    top_k: 2
     monitor: "f1"
     mode: "max"
 
