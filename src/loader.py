@@ -2,7 +2,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset, random_split
 
-from src.dataset import MNISTDataset
+from src.dataset import MNISTDataset, RESDDataset
 
 
 def zero_pad_collate_fn(batch):
@@ -34,13 +34,29 @@ def create_dataloaders(cfg):
     dataset_path = cfg.dataset.paths.local_path
 
     if cfg.dataset.name == 'AudioMNIST':
-        test_set = MNISTDataset(path_to_data=dataset_path, split='test')
-        train_set = MNISTDataset(path_to_data=dataset_path, split='train')
+        test_set = MNISTDataset(
+            path_to_data=dataset_path,
+            split='test',
+            target_sample_rate=cfg.dataset.sample_rate,
+        )
+        train_set = MNISTDataset(
+            path_to_data=dataset_path,
+            split='train',
+            target_sample_rate=cfg.dataset.sample_rate,
+        )
         train_set, dev_set = train_test_split(cfg, train_set, test_ratio=cfg.dataloader.dev_size)
-
-    # elif cfg.dataset.name == 'Dusha':
-    #     train_set = MNISTDataset(split='train')
-    #     test_set = MNISTDataset(split='test')
+    elif cfg.dataset.name == 'RESD':
+        test_set = RESDDataset(
+            split='test',
+            target_sample_rate=cfg.dataset.sample_rate,
+        )
+        train_set = RESDDataset(
+            split='train',
+            target_sample_rate=cfg.dataset.sample_rate,
+        )
+        train_set, dev_set = train_test_split(cfg, train_set, test_ratio=cfg.dataloader.dev_size)
+    else:
+        raise ValueError(f"Unsupported dataset: {cfg.dataset.name}")
         
     generator = torch.Generator().manual_seed(cfg.seed)
     train_loader = DataLoader(train_set, 
