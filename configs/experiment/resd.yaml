@@ -40,12 +40,12 @@ model:
 feature:
   regularization:
     enabled: true
-    feature_noise_std: 0.015
-    feature_dropout: 0.15
-    time_mask_param: 10
+    feature_noise_std: 0.008
+    feature_dropout: 0.08
+    time_mask_param: 8
     freq_mask_param: 6
-    num_time_masks: 3
-    num_freq_masks: 2
+    num_time_masks: 2
+    num_freq_masks: 1
 
 wandb:
   tags: ["resd", "small-data", "regularized"]
