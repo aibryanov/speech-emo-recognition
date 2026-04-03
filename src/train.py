@@ -6,6 +6,8 @@ import torch.nn as nn
 from omegaconf import OmegaConf
 from sklearn.metrics import precision_recall_fscore_support
 
+from src.wandb_utils import log_wandb_metrics
+
 
 def _copmute_metrics(y_true, y_pred, loss, total_examples, average='macro'):
     prec, recall, f1, _ = precision_recall_fscore_support(
@@ -175,7 +177,7 @@ def evaluate(model, data_loader, loss_fn, device, average="macro"):
 
     return metrics
 
-def train(cfg, model, train_loader, dev_loader=None):
+def train(cfg, model, train_loader, dev_loader=None, wandb_run=None):
     device = cfg.train.device
     model = model.to(device)
 
@@ -256,6 +258,7 @@ def train(cfg, model, train_loader, dev_loader=None):
             metrics = evaluate(model, dev_loader, loss_fn, device, average=metrics_average)
             _print_metrics(metrics, epoch, num_epochs, split='DEV')
             _append_split_history(metrics, history, split='dev')
+            log_wandb_metrics(wandb_run, metrics, split="dev", epoch=epoch)
 
             if checkpoint_enabled:
                 saved_checkpoints = _update_top_k_checkpoints(
@@ -276,6 +279,7 @@ def train(cfg, model, train_loader, dev_loader=None):
         metrics = _copmute_metrics(all_labels, all_predictions, running_loss, total_examples, average=metrics_average)
         _print_metrics(metrics, epoch, num_epochs, split='TRAIN')
         _append_split_history(metrics, history, split='train')
+        log_wandb_metrics(wandb_run, metrics, split="train", epoch=epoch)
 
         if checkpoint_enabled and dev_loader is None:
             saved_checkpoints = _update_top_k_checkpoints(

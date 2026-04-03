@@ -5,6 +5,7 @@ from omegaconf import DictConfig, OmegaConf
 from src.loader import create_dataloaders
 from src.model import LSTMClassifier
 from src.train import evaluate, train
+from src.wandb_utils import finish_wandb, init_wandb, log_wandb_metrics
 
 def print_metrics(test_metrics):
     print("–––––TEST METRICS–––––")
@@ -17,24 +18,31 @@ def print_metrics(test_metrics):
 def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
 
-    train_loader, dev_loader, test_loader = create_dataloaders(cfg)
-    model = LSTMClassifier(cfg)
+    wandb_run = None
 
-    history = train(cfg, model, train_loader, dev_loader)
+    try:
+        train_loader, dev_loader, test_loader = create_dataloaders(cfg)
+        model = LSTMClassifier(cfg)
+        wandb_run = init_wandb(cfg, model)
 
-    device = cfg.train.device
-    loss_fn = nn.CrossEntropyLoss()
-    test_metrics = evaluate(
-        model,
-        test_loader,
-        loss_fn,
-        device,
-        average=cfg.train.get("metrics_average", "macro"),
-    )
+        history = train(cfg, model, train_loader, dev_loader, wandb_run=wandb_run)
 
-    print_metrics(test_metrics)
+        device = cfg.train.device
+        loss_fn = nn.CrossEntropyLoss()
+        test_metrics = evaluate(
+            model,
+            test_loader,
+            loss_fn,
+            device,
+            average=cfg.train.get("metrics_average", "macro"),
+        )
+        log_wandb_metrics(wandb_run, test_metrics, split="test", epoch=cfg.train.epochs)
 
-    return history
+        print_metrics(test_metrics)
+
+        return history
+    finally:
+        finish_wandb(wandb_run)
 
 
 
