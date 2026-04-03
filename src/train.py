@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
-from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import classification_report, confusion_matrix, precision_recall_fscore_support
 
 from src.wandb_utils import log_wandb_metrics
 
@@ -23,6 +23,86 @@ def _copmute_metrics(y_true, y_pred, loss, total_examples, average='macro'):
         'f1': float(f1),
         'loss': float(loss / total_examples),
     }
+
+
+def _should_update_best(current_score, best_score, mode="max", min_delta=0.0):
+    if best_score is None:
+        return True
+
+    if mode == "max":
+        return current_score > best_score + min_delta
+    if mode == "min":
+        return current_score < best_score - min_delta
+
+    raise ValueError(f"Unsupported mode: {mode}")
+
+
+def _get_dataset_class_names(dataset):
+    current = dataset
+
+    while hasattr(current, "dataset"):
+        if hasattr(current, "class_names"):
+            break
+        current = current.dataset
+
+    if hasattr(current, "class_names"):
+        return list(current.class_names)
+
+    raise AttributeError("Could not infer class names from dataset.")
+
+
+def build_classification_details(y_true, y_pred, class_names):
+    labels = list(range(len(class_names)))
+    report = classification_report(
+        y_true,
+        y_pred,
+        labels=labels,
+        target_names=class_names,
+        output_dict=True,
+        zero_division=0,
+    )
+    matrix = confusion_matrix(y_true, y_pred, labels=labels)
+
+    return {
+        "class_names": class_names,
+        "report": report,
+        "confusion_matrix": matrix,
+        "y_true": list(y_true),
+        "y_pred": list(y_pred),
+    }
+
+
+def print_classification_details(details, split="TEST"):
+    print(f"–––––{split} PER-CLASS METRICS–––––")
+    header = f"{'class':<16}{'precision':>10}{'recall':>10}{'f1':>10}{'support':>10}"
+    print(header)
+
+    report = details["report"]
+    for class_name in details["class_names"]:
+        class_metrics = report[class_name]
+        print(
+            f"{class_name:<16}"
+            f"{class_metrics['precision']:>10.4f}"
+            f"{class_metrics['recall']:>10.4f}"
+            f"{class_metrics['f1-score']:>10.4f}"
+            f"{int(class_metrics['support']):>10}"
+        )
+
+    for aggregate_name in ["macro avg", "weighted avg"]:
+        aggregate_metrics = report[aggregate_name]
+        print(
+            f"{aggregate_name:<16}"
+            f"{aggregate_metrics['precision']:>10.4f}"
+            f"{aggregate_metrics['recall']:>10.4f}"
+            f"{aggregate_metrics['f1-score']:>10.4f}"
+            f"{int(aggregate_metrics['support']):>10}"
+        )
+
+    print(f"accuracy{'':<8}{report['accuracy']:>10.4f}")
+    print(f"–––––{split} CONFUSION MATRIX–––––")
+    print("rows=true, cols=pred")
+    print("labels:", details["class_names"])
+    print(details["confusion_matrix"])
 
 
 def _get_checkpoint_dir(cfg):
@@ -142,7 +222,7 @@ def _print_metrics(metrics, epoch, num_epochs, split='TRAIN'):
     return 
 
 @torch.no_grad()
-def evaluate(model, data_loader, loss_fn, device, average="macro"):
+def evaluate(model, data_loader, loss_fn, device, average="macro", return_predictions=False):
     model.eval()
 
     total_loss = 0.0
@@ -175,13 +255,16 @@ def evaluate(model, data_loader, loss_fn, device, average="macro"):
         average=average,
     )
 
+    if return_predictions:
+        return metrics, all_labels, all_predictions
+
     return metrics
 
 def train(cfg, model, train_loader, dev_loader=None, wandb_run=None):
     device = cfg.train.device
     model = model.to(device)
 
-    loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.CrossEntropyLoss(label_smoothing=cfg.train.get("label_smoothing", 0.0))
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=cfg.train.learning_rate,
@@ -191,9 +274,14 @@ def train(cfg, model, train_loader, dev_loader=None, wandb_run=None):
     num_epochs = cfg.train.epochs
     log_every = cfg.train.get("log_every", 0)
     metrics_average = cfg.train.get("metrics_average", "macro")
+    grad_clip_norm = cfg.train.get("grad_clip_norm", 0.0)
     checkpoint_enabled = cfg.train.checkpoint.get('enabled', False)
+    early_stopping_cfg = cfg.train.get("early_stopping", {})
+    early_stopping_enabled = early_stopping_cfg.get("enabled", False) and dev_loader is not None
     checkpoint_dir = None
     saved_checkpoints = []
+    best_early_stopping_score = None
+    early_stopping_bad_epochs = 0
 
     if checkpoint_enabled:
         checkpoint_dir = _get_checkpoint_dir(cfg)
@@ -234,6 +322,8 @@ def train(cfg, model, train_loader, dev_loader=None, wandb_run=None):
             predictions = logits.argmax(dim=1)
 
             loss.backward()
+            if grad_clip_norm and grad_clip_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_norm)
             optimizer.step()
 
             batch_size = labels.size(0)
@@ -271,6 +361,20 @@ def train(cfg, model, train_loader, dev_loader=None, wandb_run=None):
                     epoch,
                 )
 
+            if early_stopping_enabled:
+                monitor_name = early_stopping_cfg.get("monitor", "f1")
+                current_score = metrics[monitor_name]
+                if _should_update_best(
+                    current_score,
+                    best_early_stopping_score,
+                    mode=early_stopping_cfg.get("mode", "max"),
+                    min_delta=early_stopping_cfg.get("min_delta", 0.0),
+                ):
+                    best_early_stopping_score = current_score
+                    early_stopping_bad_epochs = 0
+                else:
+                    early_stopping_bad_epochs += 1
+
             del metrics
 
         if total_examples == 0:
@@ -293,6 +397,14 @@ def train(cfg, model, train_loader, dev_loader=None, wandb_run=None):
             )
 
         del metrics
+
+        if early_stopping_enabled and early_stopping_bad_epochs >= early_stopping_cfg.get("patience", 5):
+            print(
+                f"Early stopping triggered after epoch {epoch}. "
+                f"No improvement in {early_stopping_cfg.get('monitor', 'f1')} "
+                f"for {early_stopping_bad_epochs} epoch(s)."
+            )
+            break
 
     return history
 

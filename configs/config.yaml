@@ -2,6 +2,7 @@ defaults:
   - dataset: "audio_mnist"
   - feature: "feature"
   - _self_
+  - optional experiment: null
 
 experiment_name: "audio_mnist_baseline"
 
@@ -15,12 +16,20 @@ dataloader:
 
 train:
   seed: 42
-  epochs: 3
+  epochs: 20
   learning_rate: 0.001
   device: cpu
   weight_decay: 0.01
   log_every: 300
   metrics_average: "macro"
+  label_smoothing: 0.1
+  grad_clip_norm: 1.0
+  early_stopping:
+    enabled: true
+    monitor: "f1"
+    mode: "max"
+    patience: 5
+    min_delta: 0.0
   checkpoint:
     enabled: true
     dir: "checkpoints"
@@ -30,7 +39,8 @@ train:
 
 model:
   pooling: "mean"
-  head_dropout: 0.2
+  feature_dropout: 0.15
+  head_dropout: 0.35
   num_classes: 10
   lstm:
     hidden_size: 128
@@ -52,5 +62,9 @@ wandb:
   watch_model: false
   watch_log: "gradients"
   watch_log_freq: 100
+
+evaluation:
+  print_per_class_metrics: true
+  print_confusion_matrix: true
 
 seed: 42

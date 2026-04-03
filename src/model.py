@@ -1,19 +1,9 @@
 import torch.nn as nn
-from src.features import get_features
+from src.features import get_feature_dim, get_features
 
 
 def _get_feature_dim(cfg):
-    total_dim = 0
-
-    for extractor_cfg in cfg.feature.extractors:
-        if extractor_cfg.name == "log_mel":
-            total_dim += extractor_cfg.params.get("n_mels", 80)
-        elif extractor_cfg.name == "mfcc":
-            total_dim += extractor_cfg.params.get("n_mfcc", 40)
-        else:
-            raise ValueError(f"Unsupported feature extractor: {extractor_cfg.name}")
-
-    return total_dim
+    return sum(get_feature_dim(extractor_cfg) for extractor_cfg in cfg.feature.extractors)
 
 
 def _get_lstm_output_dim(cfg):
@@ -22,13 +12,20 @@ def _get_lstm_output_dim(cfg):
     return cfg.model.lstm.hidden_size * num_directions
 
 
+def _get_num_classes(cfg):
+    return cfg.dataset.get("num_classes", cfg.model.num_classes)
+
+
 class Featurizer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
+        self.input_dropout = nn.Dropout(self.cfg.model.get("feature_dropout", 0.0))
 
     def forward(self, batch):
-        return get_features(batch, self.cfg)
+        features = get_features(batch, self.cfg, training=self.training)
+
+        return self.input_dropout(features)
 
 
 class LSTMClassifier(nn.Module):
@@ -50,7 +47,7 @@ class LSTMClassifier(nn.Module):
         )
         self.pooling = self.cfg.model.pooling
         self.head_dropout = nn.Dropout(self.cfg.model.head_dropout)
-        self.fc = nn.Linear(_get_lstm_output_dim(self.cfg), self.cfg.model.num_classes)
+        self.fc = nn.Linear(_get_lstm_output_dim(self.cfg), _get_num_classes(self.cfg))
 
     def _pool_outputs(self, outputs):
         if self.pooling == "last":

@@ -1,7 +1,8 @@
 name: "RESD"
+num_classes: 7
 
 paths:
-  hf_path: "gilkeyio/AudioMNIST"
-  local_path: "data/AudioMNIST"
+  hf_path: "Aniemore/resd"
+  local_path: "data/RESD"
 
 sample_rate: 16000

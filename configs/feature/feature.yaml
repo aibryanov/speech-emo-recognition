@@ -1,11 +1,4 @@
 extractors:
-  - name: "log_mel"
-    params:
-      n_fft: 2048
-      hop_length: 512
-      n_mels: 80
-      window: "hann"
-
   - name: "mfcc"
     params:
       n_fft: 2048
@@ -13,3 +6,65 @@ extractors:
       n_mels: 80
       n_mfcc: 40
       window: "hann"
+
+  - name: "mfcc_delta"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      n_mels: 80
+      n_mfcc: 40
+      window: "hann"
+
+  - name: "mfcc_delta2"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      n_mels: 80
+      n_mfcc: 40
+      window: "hann"
+
+  - name: "rms_energy"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      window: "hann"
+
+  - name: "spectral_centroid"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      window: "hann"
+
+  - name: "spectral_bandwidth"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      window: "hann"
+
+  - name: "spectral_rolloff"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      roll_percent: 0.85
+      window: "hann"
+
+  - name: "spectral_flatness"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      window: "hann"
+
+  - name: "spectral_flux"
+    params:
+      n_fft: 2048
+      hop_length: 512
+      window: "hann"
+
+regularization:
+  enabled: true
+  feature_noise_std: 0.01
+  feature_dropout: 0.1
+  time_mask_param: 12
+  freq_mask_param: 8
+  num_time_masks: 2
+  num_freq_masks: 2

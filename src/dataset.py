@@ -14,6 +14,7 @@ class MNISTDataset(Dataset):
         dataset_dict = load_from_disk(path_to_data)
         self.audioMNIST = dataset_dict[split]
         self.labels = self.audioMNIST["digit"]
+        self.class_names = [str(i) for i in sorted(set(self.labels))]
         self.target_sample_rate = target_sample_rate
         self._resamplers = {}
 
@@ -54,6 +55,9 @@ class RESDDataset(Dataset):
             "disgust": 5,
             "sadness": 6,
         }
+        self.class_names = [None] * len(self.mapping)
+        for label_name, label_id in self.mapping.items():
+            self.class_names[label_id] = label_name
         self.target_sample_rate = target_sample_rate
         self._resamplers = {}
 

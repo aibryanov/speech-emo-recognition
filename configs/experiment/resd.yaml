@@ -1,0 +1,55 @@
+# @package _global_
+
+experiment_name: "resd_regularized"
+
+dataloader:
+  batch_size: 16
+  num_workers: 2
+  shuffle: true
+  dev_size: 0.15
+
+train:
+  epochs: 35
+  learning_rate: 0.00035
+  weight_decay: 0.03
+  log_every: 10
+  label_smoothing: 0.12
+  grad_clip_norm: 0.8
+  early_stopping:
+    enabled: true
+    monitor: "f1"
+    mode: "max"
+    patience: 7
+    min_delta: 0.001
+  checkpoint:
+    enabled: true
+    top_k: 1
+    monitor: "f1"
+    mode: "max"
+
+model:
+  pooling: "mean"
+  feature_dropout: 0.2
+  head_dropout: 0.45
+  lstm:
+    hidden_size: 64
+    num_layers: 1
+    dropout: 0.0
+    bidirectional: true
+
+feature:
+  regularization:
+    enabled: true
+    feature_noise_std: 0.015
+    feature_dropout: 0.15
+    time_mask_param: 10
+    freq_mask_param: 6
+    num_time_masks: 3
+    num_freq_masks: 2
+
+wandb:
+  tags: ["resd", "small-data", "regularized"]
+
+evaluation:
+  print_per_class_metrics: true
+  print_confusion_matrix: true

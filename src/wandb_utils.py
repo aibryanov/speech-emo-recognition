@@ -49,6 +49,26 @@ def log_wandb_metrics(run, metrics, split=None, epoch=None):
     run.log(payload)
 
 
+def log_wandb_confusion_matrix(run, y_true, y_pred, class_names, split="test"):
+    if run is None:
+        return
+
+    try:
+        import wandb
+    except ImportError:
+        return
+
+    run.log(
+        {
+            f"{split}/confusion_matrix": wandb.plot.confusion_matrix(
+                y_true=y_true,
+                preds=y_pred,
+                class_names=class_names,
+            )
+        }
+    )
+
+
 def finish_wandb(run):
     if run is not None:
         run.finish()
